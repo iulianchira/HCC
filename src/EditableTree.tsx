@@ -875,6 +875,23 @@ function EditableTree({
   }, [draggedNodeId, nodes]);
 
   useEffect(() => {
+    const nextNodes = cloneNodes(initialNodes);
+    setDrawerOpen(false);
+    setEditingId(null);
+    setPendingNewId(null);
+    setDraftLabel("");
+    setDraftValue("");
+    setDraftTextHsvColor(DEFAULT_TEXT_HSV_COLOR);
+    setDraftBackgroundHsvColor(DEFAULT_BACKGROUND_HSV_COLOR);
+    setSearchQuery("");
+    setDraggedNodeId(null);
+    setDropHint(null);
+    setNodes(nextNodes);
+    setOpenItems(new Set(collectBranchIds(nextNodes)));
+    onSelectedItemIdsChange?.([]);
+  }, [initialNodes, onSelectedItemIdsChange]);
+
+  useEffect(() => {
     if (isSelectMode) {
       setActionsOverflowByNodeId({});
       return;
