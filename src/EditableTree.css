@@ -1,0 +1,185 @@
+.editableTree {
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.toolbar .fui-Button {
+  min-width: 30px;
+}
+
+.toolbarActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+.searchRow {
+  margin-bottom: 12px;
+}
+
+.searchInput {
+  width: 100%;
+}
+
+.editableTree .fui-TreeItemLayout__main {
+  width: 100%;
+}
+
+.nodeRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.nodeLabelGroup {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.selectionCheckbox {
+  flex: 0 0 auto;
+}
+
+.nodePill {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.nodePillButton {
+  border: 0;
+  outline: none;
+}
+
+.nodePillButtonEditable {
+  cursor: pointer;
+}
+
+.nodePillSearchMatch {
+  box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+}
+
+.actionGroup {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  justify-content: flex-end;
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+.actionGroup .fui-Button {
+  min-width: 28px;
+}
+
+.emptyState {
+  color: #5c5c5c;
+  padding: 8px 0;
+}
+
+.editorForm {
+  display: grid;
+  gap: 10px;
+  max-width: 560px;
+}
+
+.pathBlock {
+  display: grid;
+  gap: 4px;
+}
+
+.pathPills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.pathSegment {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pathPill {
+  max-width: 240px;
+}
+
+.pathSeparator {
+  color: #605e5c;
+  font-size: 12px;
+  line-height: 1;
+}
+
+.readonlyValue {
+  font-size: 13px;
+  color: #605e5c;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  word-break: break-all;
+}
+
+.fieldLabel {
+  font-size: 14px;
+  font-weight: 600;
+  color: #323130;
+}
+
+.colorPickerBlock {
+  display: grid;
+  gap: 10px;
+  max-width: 340px;
+}
+
+.colorField {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.colorSwatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  border: 1px solid #c8c6c4;
+}
+
+.colorValue {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New",
+    monospace;
+  color: #605e5c;
+}
+
+.pillPreviewWrap {
+  display: grid;
+  gap: 8px;
+}
+
+.nodePillPreview {
+  width: fit-content;
+}
