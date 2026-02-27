@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import type { FormEvent } from "react";
+import type { DragEvent, FormEvent } from "react";
 import { Button } from "@fluentui/react-button";
 import { Checkbox } from "@fluentui/react-checkbox";
 import { ColorArea, ColorPicker, ColorSlider } from "@fluentui/react-color-picker";
@@ -20,6 +20,7 @@ import {
   DeleteRegular,
   DismissRegular,
   EditRegular,
+  ReOrderDotsVerticalRegular,
   SearchRegular,
   TextIndentDecreaseRegular,
   TextIndentIncreaseRegular
@@ -34,6 +35,7 @@ import "./EditableTree.css";
 type EditableTreeProps = {
   initialNodes: TreeNode[];
   mode: TreeControlMode;
+  dragAndDropEnabled?: boolean;
   selectionMode: TreeSelectionMode;
   selectionBehavior: TreeSelectionBehavior;
   selectedItemIds: TreeItemValue[];
@@ -50,6 +52,7 @@ type HsvColor = {
 };
 
 type NodePath = number[];
+type DropPosition = "before" | "inside" | "after";
 type CascadeNodeState = "checked" | "mixed" | "unchecked";
 type SearchFilterState = {
   visibleNodeIds: Set<TreeItemValue>;
@@ -60,6 +63,7 @@ type SearchFilterState = {
 const DEFAULT_TEXT_COLOR = "#FFFFFF";
 const DEFAULT_BACKGROUND_COLOR = "#0F6CBD";
 const TOOLTIP_SHOW_DELAY_MS = 2000;
+const DRAG_NODE_MIME_TYPE = "application/x-editable-tree-node-id";
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
@@ -591,9 +595,97 @@ const outdentNodeByPath = (nodes: TreeNode[], path: NodePath): TreeNode[] => {
   return nextNodes;
 };
 
+const isPathPrefix = (prefixPath: NodePath, path: NodePath): boolean =>
+  prefixPath.length <= path.length && prefixPath.every((segment, index) => path[index] === segment);
+
+const removeNodeAtPath = (nodes: TreeNode[], path: NodePath): { nextNodes: TreeNode[]; removedNode?: TreeNode } => {
+  const index = path[path.length - 1];
+  if (index === undefined) {
+    return { nextNodes: nodes };
+  }
+
+  const nextNodes = cloneNodes(nodes);
+  const parentPath = path.slice(0, -1);
+  const siblings = getSiblingList(nextNodes, parentPath);
+  if (!siblings || index < 0 || index >= siblings.length) {
+    return { nextNodes: nodes };
+  }
+
+  const [removedNode] = siblings.splice(index, 1);
+  if (!removedNode) {
+    return { nextNodes: nodes };
+  }
+
+  if (parentPath.length > 0 && siblings.length === 0) {
+    const parentNode = getNodeAtPath(nextNodes, parentPath);
+    if (parentNode) {
+      parentNode.children = undefined;
+    }
+  }
+
+  return { nextNodes, removedNode };
+};
+
+const insertNodeAtPath = (nodes: TreeNode[], targetPath: NodePath, movingNode: TreeNode, position: DropPosition): TreeNode[] => {
+  if (position === "inside") {
+    const targetNode = getNodeAtPath(nodes, targetPath);
+    if (!targetNode) {
+      return nodes;
+    }
+
+    targetNode.children = [...(targetNode.children ?? []), movingNode];
+    return nodes;
+  }
+
+  const targetIndex = targetPath[targetPath.length - 1];
+  if (targetIndex === undefined) {
+    return nodes;
+  }
+
+  const parentPath = targetPath.slice(0, -1);
+  const siblings = getSiblingList(nodes, parentPath);
+  if (!siblings) {
+    return nodes;
+  }
+
+  const insertionIndex = position === "before" ? targetIndex : targetIndex + 1;
+  siblings.splice(insertionIndex, 0, movingNode);
+  return nodes;
+};
+
+const moveNodeByDrop = (nodes: TreeNode[], sourceId: string, targetId: string, position: DropPosition): TreeNode[] => {
+  if (sourceId === targetId) {
+    return nodes;
+  }
+
+  const sourcePath = getPathById(nodes, sourceId);
+  const targetPath = getPathById(nodes, targetId);
+  if (!sourcePath || !targetPath) {
+    return nodes;
+  }
+
+  // Block drops into the dragged node subtree.
+  if (isPathPrefix(sourcePath, targetPath)) {
+    return nodes;
+  }
+
+  const { nextNodes, removedNode } = removeNodeAtPath(nodes, sourcePath);
+  if (!removedNode) {
+    return nodes;
+  }
+
+  const nextTargetPath = getPathById(nextNodes, targetId);
+  if (!nextTargetPath) {
+    return nodes;
+  }
+
+  return insertNodeAtPath(nextNodes, nextTargetPath, removedNode, position);
+};
+
 function EditableTree({
   initialNodes,
   mode,
+  dragAndDropEnabled = true,
   selectionMode,
   selectionBehavior,
   selectedItemIds,
@@ -611,6 +703,8 @@ function EditableTree({
   const [draftValue, setDraftValue] = useState("");
   const [draftTextHsvColor, setDraftTextHsvColor] = useState<HsvColor>(DEFAULT_TEXT_HSV_COLOR);
   const [draftBackgroundHsvColor, setDraftBackgroundHsvColor] = useState<HsvColor>(DEFAULT_BACKGROUND_HSV_COLOR);
+  const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
+  const [dropHint, setDropHint] = useState<{ targetId: string; position: DropPosition } | null>(null);
 
   const totalNodes = useMemo(() => countNodes(nodes), [nodes]);
   const branchNodeIds = useMemo(() => collectBranchIds(nodes), [nodes]);
@@ -648,6 +742,7 @@ function EditableTree({
     [nodes, normalizedSearchQuery]
   );
   const isSelectMode = mode === "select";
+  const isDragAndDropActive = !isSelectMode && dragAndDropEnabled;
   const isCascadeSelection = isSelectMode && selectionMode === "multiple" && selectionBehavior === "cascade";
   const effectiveOpenItems = useMemo(() => {
     if (!isSearchActive) {
@@ -754,6 +849,20 @@ function EditableTree({
       setDraftBackgroundHsvColor(DEFAULT_BACKGROUND_HSV_COLOR);
     }
   }, [nodes, editingId]);
+
+  useEffect(() => {
+    if (!isDragAndDropActive) {
+      setDraggedNodeId(null);
+      setDropHint(null);
+    }
+  }, [isDragAndDropActive]);
+
+  useEffect(() => {
+    if (draggedNodeId && !hasNode(nodes, draggedNodeId)) {
+      setDraggedNodeId(null);
+      setDropHint(null);
+    }
+  }, [draggedNodeId, nodes]);
 
   const closeEditor = (): void => {
     setDrawerOpen(false);
@@ -948,6 +1057,131 @@ function EditableTree({
     }
   };
 
+  const getDropPosition = (event: DragEvent<HTMLElement>): DropPosition => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const yOffset = event.clientY - bounds.top;
+    const edgeZone = Math.min(10, bounds.height * 0.3);
+
+    if (yOffset < edgeZone) {
+      return "before";
+    }
+    if (yOffset > bounds.height - edgeZone) {
+      return "after";
+    }
+    return "inside";
+  };
+
+  const getDraggedNodeId = (event: DragEvent<HTMLElement>): string | null => {
+    if (draggedNodeId) {
+      return draggedNodeId;
+    }
+
+    const customTypeId = event.dataTransfer.getData(DRAG_NODE_MIME_TYPE).trim();
+    if (customTypeId) {
+      return customTypeId;
+    }
+
+    const plainTextId = event.dataTransfer.getData("text/plain").trim();
+    return plainTextId || null;
+  };
+
+  const canDropOnTarget = (sourceId: string, targetId: string): boolean => {
+    if (sourceId === targetId) {
+      return false;
+    }
+
+    const sourcePath = getPathById(nodes, sourceId);
+    const targetPath = getPathById(nodes, targetId);
+    if (!sourcePath || !targetPath) {
+      return false;
+    }
+
+    return !isPathPrefix(sourcePath, targetPath);
+  };
+
+  const handleDragStart = (event: DragEvent<HTMLElement>, nodeId: string): void => {
+    if (!isDragAndDropActive) {
+      return;
+    }
+
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData(DRAG_NODE_MIME_TYPE, nodeId);
+    event.dataTransfer.setData("text/plain", nodeId);
+    setDraggedNodeId(nodeId);
+    setDropHint(null);
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLElement>, targetNode: TreeNode): void => {
+    if (!isDragAndDropActive) {
+      return;
+    }
+
+    const targetId = targetNode.id;
+    const sourceId = getDraggedNodeId(event);
+    if (!sourceId || !canDropOnTarget(sourceId, targetId)) {
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    const position = getDropPosition(event);
+    setDropHint((previousDropHint) => {
+      if (previousDropHint?.targetId === targetId && previousDropHint.position === position) {
+        return previousDropHint;
+      }
+
+      return { targetId, position };
+    });
+  };
+
+  const handleDragLeave = (event: DragEvent<HTMLElement>, targetId: string): void => {
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) {
+      return;
+    }
+
+    setDropHint((previousDropHint) => (previousDropHint?.targetId === targetId ? null : previousDropHint));
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>, targetNode: TreeNode): void => {
+    if (!isDragAndDropActive) {
+      return;
+    }
+
+    const targetId = targetNode.id;
+    const sourceId = getDraggedNodeId(event);
+    if (!sourceId) {
+      setDropHint(null);
+      setDraggedNodeId(null);
+      return;
+    }
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (!canDropOnTarget(sourceId, targetId)) {
+      setDropHint(null);
+      setDraggedNodeId(null);
+      return;
+    }
+
+    const dropPosition = dropHint?.targetId === targetId ? dropHint.position : getDropPosition(event);
+    if (dropPosition === "inside") {
+      includeOpenItems([targetId]);
+    }
+
+    setNodes((prevNodes) => moveNodeByDrop(prevNodes, sourceId, targetId, dropPosition));
+    setDropHint(null);
+    setDraggedNodeId(null);
+  };
+
+  const handleDragEnd = (): void => {
+    setDropHint(null);
+    setDraggedNodeId(null);
+  };
+
   const renderNode = (node: TreeNode, path: NodePath, siblingCount: number): JSX.Element | null => {
     // During search, render only matched nodes and their ancestors.
     if (isSearchActive && !searchVisibleNodeIds.has(node.id)) {
@@ -964,11 +1198,44 @@ function EditableTree({
     const canIndent = index > 0;
     const canOutdent = path.length > 1;
     const children = node.children ?? [];
+    const dropPosition = dropHint?.targetId === node.id ? dropHint.position : null;
+    const nodeRowClassName = `nodeRow${draggedNodeId === node.id ? " nodeRowDragging" : ""}${
+      dropPosition === "before" ? " nodeRowDropBefore" : ""
+    }${dropPosition === "inside" ? " nodeRowDropInside" : ""}${dropPosition === "after" ? " nodeRowDropAfter" : ""}`;
+    const layoutClassName = `nodeTreeItemLayout${hasChildren ? " nodeTreeItemLayoutBranch" : " nodeTreeItemLayoutLeaf"}${
+      isDragAndDropActive ? " nodeTreeItemLayoutWithDrag" : ""
+    }`;
 
     return (
       <TreeItem key={node.id} value={node.id} itemType={hasChildren ? "branch" : "leaf"}>
-        <TreeItemLayout>
-          <div className="nodeRow">
+        <TreeItemLayout
+          className={layoutClassName}
+          onDragOver={(event) => handleDragOver(event, node)}
+          onDrop={(event) => handleDrop(event, node)}
+          onDragLeave={(event) => handleDragLeave(event, node.id)}
+          iconBefore={
+            isDragAndDropActive
+              ? {
+                  className: "dragHandleSlot",
+                  children: (
+                    <button
+                      type="button"
+                      className="dragHandle"
+                      draggable
+                      aria-label={`Drag ${node.label}`}
+                      tabIndex={-1}
+                      onClick={(event) => event.stopPropagation()}
+                      onDragStart={(event) => handleDragStart(event, node.id)}
+                      onDragEnd={handleDragEnd}
+                    >
+                      <ReOrderDotsVerticalRegular className="dragHandleIcon" />
+                    </button>
+                  )
+                }
+              : undefined
+          }
+        >
+          <div className={nodeRowClassName}>
             <div className="nodeLabelGroup">
               {isSelectMode ? (
                 <Checkbox

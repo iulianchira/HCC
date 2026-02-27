@@ -57,6 +57,7 @@ const buildNodeMapById = (nodes: TreeNode[]): Map<string, TreeNode> => {
 function App() {
   const [snapshot, setSnapshot] = useState<TreeNode[]>(starterTree);
   const [mode, setMode] = useState<TreeControlMode>("edit");
+  const [dragAndDropEnabled, setDragAndDropEnabled] = useState(true);
   const [selectionMode, setSelectionMode] = useState<TreeSelectionMode>("multiple");
   const [selectionBehavior, setSelectionBehavior] = useState<TreeSelectionBehavior>("independent");
   const [leafOnlySelection, setLeafOnlySelection] = useState(false);
@@ -103,7 +104,7 @@ function App() {
           Fluent UI v9 Editable Tree
         </Text>
         <Text>
-          Switch between edit and select behavior. In select mode, checkbox selection supports independent or parent-child cascade behavior with optional leaf-only restriction.
+          Switch between edit and select behavior. In select mode, checkbox selection supports independent or parent-child cascade behavior with optional leaf-only restriction. Drag and drop can be toggled on or off.
         </Text>
       </header>
 
@@ -139,6 +140,24 @@ function App() {
             </Button>
           </div>
           <Text className="selectionCount">Selected: {selectedItemIds.length}</Text>
+        </div>
+
+        <div className="controlRow">
+          <Text weight="semibold">Drag and drop</Text>
+          <div className="toggleGroup">
+            <Button
+              appearance={dragAndDropEnabled ? "primary" : "secondary"}
+              onClick={() => setDragAndDropEnabled(true)}
+            >
+              On
+            </Button>
+            <Button
+              appearance={!dragAndDropEnabled ? "primary" : "secondary"}
+              onClick={() => setDragAndDropEnabled(false)}
+            >
+              Off
+            </Button>
+          </div>
         </div>
 
         <div className="controlRow">
@@ -186,6 +205,7 @@ function App() {
       <EditableTree
         initialNodes={starterTree}
         mode={mode}
+        dragAndDropEnabled={dragAndDropEnabled}
         selectionMode={selectionMode}
         selectionBehavior={selectionBehavior}
         selectedItemIds={selectedItemIds}
