@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, FormEvent } from "react";
 import { Button } from "@fluentui/react-button";
 import { Checkbox } from "@fluentui/react-checkbox";
@@ -20,11 +20,13 @@ import {
   DeleteRegular,
   DismissRegular,
   EditRegular,
+  MoreHorizontalRegular,
   ReOrderDotsVerticalRegular,
   SearchRegular,
   TextIndentDecreaseRegular,
   TextIndentIncreaseRegular
 } from "@fluentui/react-icons";
+import { Menu, MenuItem, MenuList, MenuPopover, MenuTrigger } from "@fluentui/react-menu";
 import { Input } from "@fluentui/react-input";
 import { Text } from "@fluentui/react-text";
 import { Tooltip } from "@fluentui/react-tooltip";
@@ -64,6 +66,12 @@ const DEFAULT_TEXT_COLOR = "#FFFFFF";
 const DEFAULT_BACKGROUND_COLOR = "#0F6CBD";
 const TOOLTIP_SHOW_DELAY_MS = 2000;
 const DRAG_NODE_MIME_TYPE = "application/x-editable-tree-node-id";
+const FULL_ACTION_BUTTON_WIDTH_PX = 28;
+const FULL_ACTION_BUTTON_GAP_PX = 4;
+const FULL_ACTION_COUNT = 7;
+const MIN_LABEL_WIDTH_PX = 180;
+const FULL_ACTIONS_REQUIRED_WIDTH_PX =
+  FULL_ACTION_COUNT * FULL_ACTION_BUTTON_WIDTH_PX + (FULL_ACTION_COUNT - 1) * FULL_ACTION_BUTTON_GAP_PX + MIN_LABEL_WIDTH_PX;
 
 const clamp = (value: number, min: number, max: number): number => Math.min(Math.max(value, min), max);
 
@@ -705,6 +713,8 @@ function EditableTree({
   const [draftBackgroundHsvColor, setDraftBackgroundHsvColor] = useState<HsvColor>(DEFAULT_BACKGROUND_HSV_COLOR);
   const [draggedNodeId, setDraggedNodeId] = useState<string | null>(null);
   const [dropHint, setDropHint] = useState<{ targetId: string; position: DropPosition } | null>(null);
+  const treeRootRef = useRef<HTMLElement | null>(null);
+  const [actionsOverflowByNodeId, setActionsOverflowByNodeId] = useState<Record<string, boolean>>({});
 
   const totalNodes = useMemo(() => countNodes(nodes), [nodes]);
   const branchNodeIds = useMemo(() => collectBranchIds(nodes), [nodes]);
@@ -863,6 +873,66 @@ function EditableTree({
       setDropHint(null);
     }
   }, [draggedNodeId, nodes]);
+
+  useEffect(() => {
+    if (isSelectMode) {
+      setActionsOverflowByNodeId({});
+      return;
+    }
+
+    const rootElement = treeRootRef.current;
+    if (!rootElement) {
+      return;
+    }
+
+    const computeActionsOverflow = (): void => {
+      const nextActionsOverflowByNodeId: Record<string, boolean> = {};
+      const rowElements = rootElement.querySelectorAll<HTMLElement>("[data-node-row-id]");
+      for (const rowElement of rowElements) {
+        const rowNodeId = rowElement.dataset.nodeRowId;
+        if (!rowNodeId) {
+          continue;
+        }
+
+        nextActionsOverflowByNodeId[rowNodeId] = rowElement.clientWidth < FULL_ACTIONS_REQUIRED_WIDTH_PX;
+      }
+
+      setActionsOverflowByNodeId((previousActionsOverflowByNodeId) => {
+        const previousKeys = Object.keys(previousActionsOverflowByNodeId);
+        const nextKeys = Object.keys(nextActionsOverflowByNodeId);
+        if (previousKeys.length === nextKeys.length) {
+          let hasChanges = false;
+          for (const nodeId of nextKeys) {
+            if (previousActionsOverflowByNodeId[nodeId] !== nextActionsOverflowByNodeId[nodeId]) {
+              hasChanges = true;
+              break;
+            }
+          }
+
+          if (!hasChanges) {
+            return previousActionsOverflowByNodeId;
+          }
+        }
+
+        return nextActionsOverflowByNodeId;
+      });
+    };
+
+    computeActionsOverflow();
+
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+
+    const resizeObserver = new ResizeObserver(() => {
+      computeActionsOverflow();
+    });
+    resizeObserver.observe(rootElement);
+
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, [isSelectMode, nodes, openItems, normalizedSearchQuery]);
 
   const closeEditor = (): void => {
     setDrawerOpen(false);
@@ -1235,7 +1305,7 @@ function EditableTree({
               : undefined
           }
         >
-          <div className={nodeRowClassName}>
+          <div className={nodeRowClassName} data-node-row-id={node.id}>
             <div className="nodeLabelGroup">
               {isSelectMode ? (
                 <Checkbox
@@ -1268,58 +1338,120 @@ function EditableTree({
 
             {!isSelectMode ? (
               <div className="actionGroup">
-                <Tooltip content="Move up" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={<ArrowUpRegular />}
-                    disabled={!canMoveUp}
-                    aria-label="Move up"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      moveItemUp(path);
-                    }}
-                  />
-                </Tooltip>
-                <Tooltip content="Move down" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={<ArrowDownRegular />}
-                    disabled={!canMoveDown}
-                    aria-label="Move down"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      moveItemDown(path);
-                    }}
-                  />
-                </Tooltip>
-                <Tooltip content="Indent" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={<TextIndentIncreaseRegular />}
-                    disabled={!canIndent}
-                    aria-label="Indent"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      indentItem(path);
-                    }}
-                  />
-                </Tooltip>
-                <Tooltip content="Outdent" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
-                  <Button
-                    size="small"
-                    appearance="subtle"
-                    icon={<TextIndentDecreaseRegular />}
-                    disabled={!canOutdent}
-                    aria-label="Outdent"
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      outdentItem(path);
-                    }}
-                  />
-                </Tooltip>
+                {actionsOverflowByNodeId[node.id] ? (
+                  <Menu positioning="below-end">
+                    <MenuTrigger disableButtonEnhancement>
+                      <Tooltip content="More actions" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
+                        <Button
+                          size="small"
+                          appearance="subtle"
+                          icon={<MoreHorizontalRegular />}
+                          aria-label="More actions"
+                          onClick={(event) => event.stopPropagation()}
+                        />
+                      </Tooltip>
+                    </MenuTrigger>
+                    <MenuPopover onClick={(event) => event.stopPropagation()}>
+                      <MenuList>
+                        <MenuItem
+                          icon={<ArrowUpRegular />}
+                          disabled={!canMoveUp}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            moveItemUp(path);
+                          }}
+                        >
+                          Move up
+                        </MenuItem>
+                        <MenuItem
+                          icon={<ArrowDownRegular />}
+                          disabled={!canMoveDown}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            moveItemDown(path);
+                          }}
+                        >
+                          Move down
+                        </MenuItem>
+                        <MenuItem
+                          icon={<TextIndentIncreaseRegular />}
+                          disabled={!canIndent}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            indentItem(path);
+                          }}
+                        >
+                          Indent
+                        </MenuItem>
+                        <MenuItem
+                          icon={<TextIndentDecreaseRegular />}
+                          disabled={!canOutdent}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            outdentItem(path);
+                          }}
+                        >
+                          Outdent
+                        </MenuItem>
+                      </MenuList>
+                    </MenuPopover>
+                  </Menu>
+                ) : (
+                  <>
+                    <Tooltip content="Move up" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        icon={<ArrowUpRegular />}
+                        disabled={!canMoveUp}
+                        aria-label="Move up"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          moveItemUp(path);
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip content="Move down" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        icon={<ArrowDownRegular />}
+                        disabled={!canMoveDown}
+                        aria-label="Move down"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          moveItemDown(path);
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip content="Indent" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        icon={<TextIndentIncreaseRegular />}
+                        disabled={!canIndent}
+                        aria-label="Indent"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          indentItem(path);
+                        }}
+                      />
+                    </Tooltip>
+                    <Tooltip content="Outdent" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
+                      <Button
+                        size="small"
+                        appearance="subtle"
+                        icon={<TextIndentDecreaseRegular />}
+                        disabled={!canOutdent}
+                        aria-label="Outdent"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          outdentItem(path);
+                        }}
+                      />
+                    </Tooltip>
+                  </>
+                )}
                 <Tooltip content="Add child item" relationship="label" showDelay={TOOLTIP_SHOW_DELAY_MS}>
                   <Button
                     size="small"
@@ -1371,7 +1503,7 @@ function EditableTree({
   };
 
   return (
-    <section className="editableTree">
+    <section className="editableTree" ref={treeRootRef}>
       <div className="toolbar">
         <Text weight="semibold">Items: {totalNodes}</Text>
         <div className="toolbarActions">

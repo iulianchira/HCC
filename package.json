@@ -15,6 +15,7 @@
     "@fluentui/react-drawer": "^9.11.4",
     "@fluentui/react-icons": "^2.0.245",
     "@fluentui/react-input": "^9.0.0",
+    "@fluentui/react-menu": "^9.21.2",
     "@fluentui/react-provider": "^9.0.0",
     "@fluentui/react-tags": "^9.7.16",
     "@fluentui/react-text": "^9.0.0",
