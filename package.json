@@ -16,6 +16,7 @@
     "@fluentui/react-icons": "^2.0.245",
     "@fluentui/react-input": "^9.0.0",
     "@fluentui/react-provider": "^9.0.0",
+    "@fluentui/react-tags": "^9.7.16",
     "@fluentui/react-text": "^9.0.0",
     "@fluentui/react-theme": "^9.0.0",
     "@fluentui/react-tree": "^9.0.0",

@@ -172,6 +172,7 @@ const collectLeafNodeIds = (nodes: TreeNode[]): TreeItemValue[] =>
     node.children?.length ? collectLeafNodeIds(node.children) : [node.id]
   );
 
+// Collect IDs toggled together in cascade mode.
 const collectSelectableSubtreeIds = (
   node: TreeNode,
   restrictSelectionToLeafNodes: boolean,
@@ -187,6 +188,7 @@ const collectSelectableSubtreeIds = (
   ];
 };
 
+// Compute tri-state checkbox value for each node from its descendants.
 const getCascadeNodeState = (
   node: TreeNode,
   selectedSet: ReadonlySet<TreeItemValue>,
@@ -216,6 +218,7 @@ const getCascadeNodeState = (
     }
   }
 
+  // Parents are checked only when all descendants are checked.
   const nodeState: CascadeNodeState = allChildrenChecked ? "checked" : hasCheckedOrMixedChild ? "mixed" : "unchecked";
   if (isSelectable) {
     checkStateById?.set(node.id, nodeState === "checked" ? true : nodeState === "mixed" ? "mixed" : false);
@@ -226,6 +229,7 @@ const getCascadeNodeState = (
   return nodeState;
 };
 
+// Canonicalize cascade selection so parent IDs follow descendant state.
 const normalizeCascadeSelection = (
   nodes: TreeNode[],
   selectedSet: ReadonlySet<TreeItemValue>,
@@ -263,6 +267,7 @@ const normalizeCascadeSelection = (
 
     const nodeState: CascadeNodeState = allChildrenChecked ? "checked" : hasCheckedOrMixedChild ? "mixed" : "unchecked";
     if (!isSelectable) {
+      // Leaf-only mode keeps branch IDs out of the selected IDs list.
       normalizedSelectedItems.delete(node.id);
       return nodeState;
     }
@@ -291,6 +296,7 @@ const isSameSelection = (left: TreeItemValue[], right: ReadonlySet<TreeItemValue
   return left.every((value) => right.has(value));
 };
 
+// Keep matched nodes plus ancestors visible, and open ancestor branches while searching.
 const buildSearchFilterState = (nodes: TreeNode[], normalizedQuery: string): SearchFilterState => {
   const visibleNodeIds = new Set<TreeItemValue>();
   const matchingNodeIds = new Set<TreeItemValue>();
@@ -524,6 +530,7 @@ const moveNodeDownByPath = (nodes: TreeNode[], path: NodePath): TreeNode[] => {
   return nextNodes;
 };
 
+// Move a node under its previous sibling as the last child.
 const indentNodeByPath = (nodes: TreeNode[], path: NodePath): TreeNode[] => {
   const index = path[path.length - 1];
   if (index === undefined || index <= 0) {
@@ -551,6 +558,7 @@ const indentNodeByPath = (nodes: TreeNode[], path: NodePath): TreeNode[] => {
   return nextNodes;
 };
 
+// Lift a node one level up and place it right after its parent.
 const outdentNodeByPath = (nodes: TreeNode[], path: NodePath): TreeNode[] => {
   const index = path[path.length - 1];
   const parentPath = path.slice(0, -1);
@@ -608,6 +616,7 @@ function EditableTree({
   const branchNodeIds = useMemo(() => collectBranchIds(nodes), [nodes]);
   const draftTextHexColor = useMemo(() => hsvToHex(draftTextHsvColor), [draftTextHsvColor]);
   const draftBackgroundHexColor = useMemo(() => hsvToHex(draftBackgroundHsvColor), [draftBackgroundHsvColor]);
+  // Path preview mirrors the in-progress label/color edits for the current node.
   const editingPathNodes = useMemo(() => {
     if (!editingId) {
       return [] as TreeNode[];
@@ -645,6 +654,7 @@ function EditableTree({
       return openItems;
     }
 
+    // Search expansion is derived state; it does not overwrite user-controlled openItems.
     return new Set([...openItems, ...branchNodeIdsToOpen]);
   }, [branchNodeIdsToOpen, isSearchActive, openItems]);
   const cascadeCheckStateById = useMemo(() => {
@@ -686,6 +696,7 @@ function EditableTree({
       return;
     }
 
+    // Remove selections that became invalid after edits or leaf-only mode changes.
     const validNodeIds = new Set(collectNodeIds(nodes));
     const leafNodeIds = new Set(collectLeafNodeIds(nodes));
     const filteredSelectedItems = selectedItemIds.filter(
@@ -701,6 +712,7 @@ function EditableTree({
       return;
     }
 
+    // Keep parent IDs synchronized with descendant state in cascade mode.
     const normalizedSelectedItems = normalizeCascadeSelection(
       nodes,
       new Set(selectedItemIds),
@@ -713,6 +725,7 @@ function EditableTree({
   }, [isCascadeSelection, nodes, onSelectedItemIdsChange, restrictSelectionToLeafNodes, selectedItemIds]);
 
   useEffect(() => {
+    // Structural edits can leave stale branch IDs in openItems; prune them.
     const validBranchIds = new Set(collectBranchIds(nodes));
     setOpenItems((previousOpenItems) => {
       let changed = false;
@@ -826,6 +839,7 @@ function EditableTree({
     const nextNode = createNode();
 
     const parentPath = getPathById(nodes, parentId);
+    // Ensure the destination branch is open so the new child is immediately visible.
     if (parentPath) {
       includeOpenItems(getPathNodeIds(nodes, parentPath));
     } else {
@@ -860,6 +874,7 @@ function EditableTree({
   const indentItem = (path: NodePath): void => {
     const index = path[path.length - 1];
     if (index !== undefined && index > 0) {
+      // Pre-open the new parent branch so the moved item stays visible.
       includeOpenItems(getPathNodeIds(nodes, [...path.slice(0, -1), index - 1]));
     }
 
@@ -911,6 +926,7 @@ function EditableTree({
 
     const nextSelectedItems = new Set(selectedItemsSet);
     if (isCascadeSelection) {
+      // Cascade mode applies the toggle to the full selectable subtree.
       const relatedIds = collectSelectableSubtreeIds(node, restrictSelectionToLeafNodes, true);
 
       if (checked) {
@@ -933,6 +949,7 @@ function EditableTree({
   };
 
   const renderNode = (node: TreeNode, path: NodePath, siblingCount: number): JSX.Element | null => {
+    // During search, render only matched nodes and their ancestors.
     if (isSearchActive && !searchVisibleNodeIds.has(node.id)) {
       return null;
     }

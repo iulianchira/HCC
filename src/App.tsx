@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@fluentui/react-button";
+import { Tag, TagGroup } from "@fluentui/react-tags";
 import { Text } from "@fluentui/react-text";
 import EditableTree from "./EditableTree";
 import type { TreeControlMode, TreeNode, TreeSelectionBehavior, TreeSelectionMode } from "./types";
@@ -37,6 +38,22 @@ const starterTree: TreeNode[] = [
   }
 ];
 
+const buildNodeMapById = (nodes: TreeNode[]): Map<string, TreeNode> => {
+  const nodeMapById = new Map<string, TreeNode>();
+
+  const visit = (nodeList: TreeNode[]): void => {
+    for (const node of nodeList) {
+      nodeMapById.set(node.id, node);
+      if (node.children?.length) {
+        visit(node.children);
+      }
+    }
+  };
+
+  visit(nodes);
+  return nodeMapById;
+};
+
 function App() {
   const [snapshot, setSnapshot] = useState<TreeNode[]>(starterTree);
   const [mode, setMode] = useState<TreeControlMode>("edit");
@@ -44,12 +61,39 @@ function App() {
   const [selectionBehavior, setSelectionBehavior] = useState<TreeSelectionBehavior>("independent");
   const [leafOnlySelection, setLeafOnlySelection] = useState(false);
   const [selectedItemIds, setSelectedItemIds] = useState<(string | number)[]>([]);
+  const nodeMapById = useMemo(() => buildNodeMapById(snapshot), [snapshot]);
+  const selectedValueTags = useMemo(
+    () =>
+      selectedItemIds
+        .map((itemId) => {
+          const nodeId = String(itemId);
+          const node = nodeMapById.get(nodeId);
+          if (!node) {
+            return null;
+          }
+
+          return {
+            id: node.id,
+            value: node.value.trim() || node.label,
+            textColor: node.textColor,
+            backgroundColor: node.backgroundColor
+          };
+        })
+        .filter((tag): tag is { id: string; value: string; textColor: string; backgroundColor: string } => tag !== null),
+    [nodeMapById, selectedItemIds]
+  );
 
   const handleSelectionModeChange = (nextSelectionMode: TreeSelectionMode): void => {
     setSelectionMode(nextSelectionMode);
     if (nextSelectionMode === "single") {
       setSelectedItemIds((prevSelectedItemIds) => prevSelectedItemIds.slice(0, 1));
     }
+  };
+
+  const handleSelectedValueDismiss = (nodeId: string): void => {
+    setSelectedItemIds((previousSelectedItemIds) =>
+      previousSelectedItemIds.filter((selectedId) => String(selectedId) !== nodeId)
+    );
   };
 
   return (
@@ -150,18 +194,43 @@ function App() {
         onChange={setSnapshot}
       />
 
+      <section className="selectedValuesPanel">
+        <div className="selectedValuesHeader">
+          <Text as="h2" size={500} weight="semibold">
+            Selected values
+          </Text>
+          <Text className="selectionCount">{selectedValueTags.length}</Text>
+        </div>
+
+        {selectedValueTags.length ? (
+          <TagGroup
+            className="selectedTagGroup"
+            dismissible
+            onDismiss={(_, data) => {
+              handleSelectedValueDismiss(data.value);
+            }}
+          >
+            {selectedValueTags.map((tag) => (
+              <Tag
+                key={tag.id}
+                value={tag.id}
+                dismissible
+                style={{ color: tag.textColor, backgroundColor: tag.backgroundColor, borderColor: "transparent" }}
+              >
+                {tag.value}
+              </Tag>
+            ))}
+          </TagGroup>
+        ) : (
+          <Text className="selectionCount">No selected values.</Text>
+        )}
+      </section>
+
       <section className="snapshotBlock">
         <Text as="h2" size={500} weight="semibold">
           Current Tree JSON
         </Text>
         <pre>{JSON.stringify(snapshot, null, 2)}</pre>
-      </section>
-
-      <section className="snapshotBlock">
-        <Text as="h2" size={500} weight="semibold">
-          Selected Item IDs
-        </Text>
-        <pre>{JSON.stringify(selectedItemIds, null, 2)}</pre>
       </section>
     </main>
   );
